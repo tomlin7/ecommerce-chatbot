@@ -1,7 +1,12 @@
+"use client";
+
 import { Separator } from "@/components/ui/separator";
+import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
 
 export function Footer() {
+  const { t } = useLanguage();
+
   return (
     <footer className="border-t bg-background flex-shrink-0">
       <div className="container py-8">
@@ -16,96 +21,83 @@ export function Footer() {
               <span className="font-bold">TORE</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Your one-stop shop for the latest technology products with
-              AI-powered assistance.
+              {t('footer.description')}
             </p>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Products</h4>
+            <h4 className="text-sm font-semibold">{t('footer.productsTitle')}</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link
-                  href="/products?category=Electronics"
-                  className="hover:text-foreground"
-                >
-                  Electronics
+                <Link href="/products?category=овощи" className="hover:text-foreground">
+                  {t('footer.vegsAndFruits')}
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/products?category=Smartphones"
-                  className="hover:text-foreground"
-                >
-                  Smartphones
+                <Link href="/products?category=молочные продукты" className="hover:text-foreground">
+                  {t('footer.dairy')}
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/products?category=Laptops"
-                  className="hover:text-foreground"
-                >
-                  Laptops
+                <Link href="/products?category=мясо" className="hover:text-foreground">
+                  {t('footer.meat')}
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/products?category=Gaming"
-                  className="hover:text-foreground"
-                >
-                  Gaming
+                <Link href="/products?is_seasonal=true" className="hover:text-foreground">
+                  {t('footer.seasonal')}
                 </Link>
               </li>
             </ul>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Support</h4>
+            <h4 className="text-sm font-semibold">{t('footer.supportTitle')}</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <Link href="/chat" className="hover:text-foreground">
-                  AI Assistant
+                  {t('footer.aiAssistant')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Help Center
+                  {t('footer.helpCenter')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Contact Us
+                  {t('footer.contactUs')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Returns
+                  {t('footer.returns')}
                 </Link>
               </li>
             </ul>
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Company</h4>
+            <h4 className="text-sm font-semibold">{t('footer.companyTitle')}</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  About
+                  {t('footer.about')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Privacy
+                  {t('footer.privacy')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Terms
+                  {t('footer.terms')}
                 </Link>
               </li>
               <li>
                 <Link href="#" className="hover:text-foreground">
-                  Careers
+                  {t('footer.careers')}
                 </Link>
               </li>
             </ul>
@@ -115,8 +107,8 @@ export function Footer() {
         <Separator className="my-6" />
 
         <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-muted-foreground">
-          <p>&copy; 2024 S-TORE. All rights reserved.</p>
-          <p>Built with Next.js and Shadcn UI</p>
+          <p>{t('footer.copyright')}</p>
+          <p>{t('footer.builtWith')}</p>
         </div>
       </div>
     </footer>

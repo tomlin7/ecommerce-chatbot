@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:unsplash.com)",
+      "WebSearch",
+      "Bash(Get-ChildItem -Path \"C:\\\\ecommerce-chatbot\" -Force)",
+      "Bash(docker-compose build *)"
+    ]
+  }
+}

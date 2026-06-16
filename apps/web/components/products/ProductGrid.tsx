@@ -28,9 +28,9 @@ export function ProductGrid({ products, loading }: ProductGridProps) {
   if (products.length === 0) {
     return (
       <div className="text-center py-12">
-        <h3 className="text-lg font-semibold mb-2">No products found</h3>
+        <h3 className="text-lg font-semibold mb-2">Товары не найдены</h3>
         <p className="text-muted-foreground">
-          Try adjusting your filters or search terms.
+          Попробуйте изменить фильтры или поисковый запрос.
         </p>
       </div>
     )

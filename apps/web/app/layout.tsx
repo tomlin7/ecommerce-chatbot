@@ -2,6 +2,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { Inter } from "next/font/google";
@@ -10,9 +11,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "S-TORE - AI-Powered Electronics Shopping",
+  title: "Фермерский магазин — свежие продукты",
   description:
-    "Discover the latest technology products with our AI shopping assistant",
+    "Откройте для себя свежие фермерские продукты с доставкой прямо к вашему столу. Поддержите местных фермеров и наслаждайтесь лучшими органическими и сезонными продуктами.",
 };
 
 export default function RootLayout({
@@ -29,14 +30,16 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <div className="min-h-screen flex flex-col">
-              <Header />
-              <main className="flex-1 overflow-auto">{children}</main>
-              <Footer />
-            </div>
-            <Toaster />
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <div className="min-h-screen flex flex-col">
+                <Header />
+                <main className="flex-1 overflow-auto">{children}</main>
+                <Footer />
+              </div>
+              <Toaster />
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

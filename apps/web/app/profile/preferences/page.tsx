@@ -99,12 +99,12 @@ export default function PreferencesPage() {
       <div className="container py-8">
         <Card className="max-w-md mx-auto text-center">
           <CardContent className="pt-6">
-            <h2 className="text-xl font-semibold mb-2">Please Login</h2>
+            <h2 className="text-xl font-semibold mb-2">Пожалуйста, войдите</h2>
             <p className="text-muted-foreground mb-4">
-              You need to be logged in to manage preferences.
+              Вам нужно войти в систему, чтобы управлять предпочтениями.
             </p>
             <Button asChild>
-              <Link href="/login">Login</Link>
+              <Link href="/login">Войти</Link>
             </Button>
           </CardContent>
         </Card>
@@ -115,9 +115,9 @@ export default function PreferencesPage() {
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Shopping Preferences</h1>
+        <h1 className="text-3xl font-bold mb-2">Предпочтения покупок</h1>
         <p className="text-muted-foreground">
-          Customize your shopping experience for better recommendations
+          Настройте свой опыт покупок для лучших рекомендаций
         </p>
       </div>
 
@@ -125,17 +125,17 @@ export default function PreferencesPage() {
         {/* Favorite Categories */}
         <Card>
           <CardHeader>
-            <CardTitle>Favorite Categories</CardTitle>
+            <CardTitle>Любимые категории</CardTitle>
             <CardDescription>
-              Select categories you're most interested in
+              Выберите категории, которые вам интересны больше всего
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Add Category</Label>
+              <Label>Добавить категорию</Label>
               <Select onValueChange={addCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
+                  <SelectValue placeholder="Выберите категорию" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories
@@ -170,9 +170,9 @@ export default function PreferencesPage() {
         {/* Price Range */}
         <Card>
           <CardHeader>
-            <CardTitle>Price Range</CardTitle>
+            <CardTitle>Диапазон цен</CardTitle>
             <CardDescription>
-              Set your preferred price range for product recommendations
+              Установите предпочитаемый диапазон цен для рекомендаций товаров
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -199,17 +199,17 @@ export default function PreferencesPage() {
         {/* Favorite Brands */}
         <Card>
           <CardHeader>
-            <CardTitle>Favorite Brands</CardTitle>
+            <CardTitle>Любимые бренды</CardTitle>
             <CardDescription>
-              Select brands you prefer for personalized recommendations
+              Выберите бренды, которые вы предпочитаете для персонализированных рекомендаций
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Add Brand</Label>
+              <Label>Добавить бренд</Label>
               <Select onValueChange={addBrand}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a brand" />
+                  <SelectValue placeholder="Выберите бренд" />
                 </SelectTrigger>
                 <SelectContent>
                   {brands
@@ -244,10 +244,10 @@ export default function PreferencesPage() {
         {/* Save Button */}
         <div className="flex justify-end space-x-4">
           <Button variant="outline" asChild>
-            <Link href="/profile">Cancel</Link>
+            <Link href="/profile">Отмена</Link>
           </Button>
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? 'Saving...' : 'Save Preferences'}
+            {loading ? 'Сохранение...' : 'Сохранить предпочтения'}
           </Button>
         </div>
       </div>

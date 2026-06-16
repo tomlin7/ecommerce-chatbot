@@ -1,14 +1,17 @@
 import json
 import logging
+import threading
 import uuid
 from typing import Any, Dict, List, Optional
 
 from flask import current_app
-from langchain.agents import AgentType, initialize_agent
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.memory import ConversationBufferWindowMemory
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from langchain.tools import Tool
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import StructuredTool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
+
 from models.chat_session import ChatSession
 from models.message import Message
 from models.product import Product
@@ -19,40 +22,311 @@ from .vector_service import VectorService
 
 logger = logging.getLogger(__name__)
 
+# Thread-local storage so each Gunicorn worker tracks its own request context
+_request_ctx = threading.local()
+
+
+# ── Tool input schemas (what the LLM sees) ──────────────────────────────────
+
+class SearchInput(BaseModel):
+    query: str = Field(description="Поисковый запрос — описание нужного товара на русском или английском")
+
+
+class FilterInput(BaseModel):
+    category: Optional[str] = Field(None, description="Категория товара: овощи, фрукты, молочные продукты, мясо, выпечка, мёд и сухофрукты")
+    subcategory: Optional[str] = Field(None, description="Подкатегория, например: помидоры, сыры, говядина")
+    brand: Optional[str] = Field(None, description="Название фермы или бренда")
+    min_price: Optional[float] = Field(None, description="Минимальная цена в тенге")
+    max_price: Optional[float] = Field(None, description="Максимальная цена в тенге")
+    min_rating: Optional[float] = Field(None, description="Минимальный рейтинг от 1 до 5")
+    in_stock_only: bool = Field(False, description="True — показывать только товары в наличии")
+    search_query: Optional[str] = Field(None, description="Дополнительный текстовый поиск внутри результатов")
+    limit: int = Field(8, description="Максимальное количество результатов (1-20)")
+
+
+class ProductIdInput(BaseModel):
+    product_id: str = Field(description="ID товара (UUID из результатов поиска)")
+
+
+class RecommendInput(BaseModel):
+    query: str = Field(description="ID товара для похожих рекомендаций, либо описание предпочтений пользователя")
+
+
+class AddToCartInput(BaseModel):
+    product_id: str = Field(description="ID товара (UUID из результатов поиска) или точное название товара")
+    quantity: int = Field(1, ge=1, le=20, description="Количество единиц товара")
+
+
+# ── Chat service ─────────────────────────────────────────────────────────────
 
 class ChatService:
-    """Enhanced chat service with LangChain and Gemini integration"""
+    """LangChain + Gemini chat service for the farm e-commerce assistant."""
 
     def __init__(self):
-        self.llm = None
+        self.llm: Optional[ChatGoogleGenerativeAI] = None
         self.vector_service = VectorService()
         self.product_service = ProductService()
         self.cart_service = CartService()
-        self.memory_sessions = {}
+        self.memory_sessions: Dict[str, ConversationBufferWindowMemory] = {}
+        self._tools: Optional[List] = None
+        self._agent = None
+        self._prompt: Optional[ChatPromptTemplate] = None
         self.initialized = False
 
+    # ── Initialization ───────────────────────────────────────────────────────
+
     def initialize(self):
-        """Initialize LangChain components"""
+        """Build LLM, tools, prompt and agent — called once on first use."""
         try:
             self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model="gemini-2.5-flash",
                 google_api_key=current_app.config["GOOGLE_API_KEY"],
-                temperature=0.7,
-                max_tokens=1000,
-                convert_system_message_to_human=True,
+                temperature=0.3,      # deterministic enough for product queries
+                max_tokens=4096,      # generous room for complete answers
             )
-
             self.vector_service.initialize()
-
+            self._tools = self._build_tools()
+            self._prompt = self._build_prompt()
+            self._agent = create_tool_calling_agent(self.llm, self._tools, self._prompt)
             self.initialized = True
-            logger.info("Chat service initialized successfully")
-
+            logger.info("ChatService initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize chat service: {str(e)}")
+            logger.error(f"ChatService init failed: {e}")
             raise
 
+    # ── Prompt ───────────────────────────────────────────────────────────────
+
+    def _build_prompt(self) -> ChatPromptTemplate:
+        system = (
+            "Ты — Farmy, умный ИИ-помощник фермерского интернет-магазина. "
+            "Помогаешь покупателям найти свежие фермерские продукты.\n\n"
+            "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:\n"
+            "1. Всегда отвечай на РУССКОМ языке — независимо от языка вопроса.\n"
+            "2. Используй инструменты для поиска товаров — никогда не выдумывай названия, цены или ID.\n"
+            "3. В каждом ответе давай конкретные товары с ценами и характеристиками.\n"
+            "4. Если запрос неясен — задай один уточняющий вопрос.\n"
+            "5. Для добавления в корзину: сначала найди товар через search_products или filter_products, "
+            "   затем используй полученный product_id в add_to_cart.\n\n"
+            "КОГДА ИСПОЛЬЗОВАТЬ ИНСТРУМЕНТЫ:\n"
+            "• search_products — семантический поиск по описанию (например: «сладкие яблоки», «свежее молоко»)\n"
+            "• filter_products — фильтрация по категории, цене, рейтингу, наличию\n"
+            "• get_product_details — подробности конкретного товара (нужен product_id)\n"
+            "• get_recommendations — похожие товары (по product_id или предпочтениям)\n"
+            "• add_to_cart — добавить товар в корзину (нужен product_id из поиска)\n\n"
+            "Категории магазина: овощи, фрукты, молочные продукты, мясо, выпечка, мёд и сухофрукты.\n"
+            "Все цены в тенге (₸)."
+        )
+        return ChatPromptTemplate.from_messages([
+            ("system", system),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+
+    # ── Tools ────────────────────────────────────────────────────────────────
+
+    def _build_tools(self) -> List:
+        return [
+            StructuredTool.from_function(
+                func=self._search_products,
+                name="search_products",
+                description="Семантический поиск фермерских товаров по описанию пользователя",
+                args_schema=SearchInput,
+            ),
+            StructuredTool.from_function(
+                func=self._filter_products,
+                name="filter_products",
+                description="Фильтрация товаров по категории, цене, рейтингу или наличию",
+                args_schema=FilterInput,
+            ),
+            StructuredTool.from_function(
+                func=self._get_product_details,
+                name="get_product_details",
+                description="Получить полные подробности о конкретном товаре по его ID",
+                args_schema=ProductIdInput,
+            ),
+            StructuredTool.from_function(
+                func=self._get_recommendations,
+                name="get_recommendations",
+                description="Получить похожие товары или персонализированные рекомендации",
+                args_schema=RecommendInput,
+            ),
+            StructuredTool.from_function(
+                func=self._add_to_cart,
+                name="add_to_cart",
+                description="Добавить товар в корзину пользователя",
+                args_schema=AddToCartInput,
+            ),
+        ]
+
+    def _search_products(self, query: str) -> str:
+        try:
+            similar = self.vector_service.search_similar_products(query, top_k=6)
+            if not similar:
+                return json.dumps({"message": "Товары по запросу не найдены.", "product_ids": []})
+
+            ids = [p["id"] for p in similar]
+            products = (
+                Product.query
+                .filter(Product.id.in_(ids), Product.is_active == True)
+                .all()
+            )
+
+            if not products:
+                return json.dumps({"message": "Товары не найдены.", "product_ids": []})
+
+            lines = [f"Найдено {len(products)} товаров:"]
+            for p in products:
+                stock = "в наличии" if p.is_in_stock() else "нет в наличии"
+                organic = " [органик]" if p.organic_certified else ""
+                lines.append(
+                    f"• ID: {p.id} | {p.name}{organic} ({p.brand}) — {p.price}₸ | "
+                    f"рейтинг {p.rating}/5 | {stock}"
+                )
+                lines.append(f"  {p.description[:120]}")
+
+            return json.dumps({"message": "\n".join(lines), "product_ids": ids})
+        except Exception as e:
+            logger.error(f"search_products error: {e}")
+            return json.dumps({"message": "Ошибка при поиске товаров.", "product_ids": []})
+
+    def _filter_products(
+        self,
+        category: Optional[str] = None,
+        subcategory: Optional[str] = None,
+        brand: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        min_rating: Optional[float] = None,
+        in_stock_only: bool = False,
+        search_query: Optional[str] = None,
+        limit: int = 8,
+    ) -> str:
+        try:
+            products = Product.search_by_filters(
+                category=category,
+                subcategory=subcategory,
+                brand=brand,
+                min_price=min_price,
+                max_price=max_price,
+                min_rating=min_rating,
+                in_stock_only=in_stock_only,
+                search_query=search_query,
+                limit=limit,
+            )
+
+            if not products:
+                return json.dumps({
+                    "message": "Товары по заданным фильтрам не найдены.",
+                    "product_ids": [],
+                })
+
+            lines = [f"Найдено {len(products)} товаров:"]
+            for p in products:
+                stock = "в наличии" if p.is_in_stock() else "нет в наличии"
+                organic = " [органик]" if p.organic_certified else ""
+                lines.append(
+                    f"• ID: {p.id} | {p.name}{organic} ({p.brand}) — {p.price}₸ | "
+                    f"рейтинг {p.rating}/5 | {stock}"
+                )
+
+            ids = [p.id for p in products]
+            return json.dumps({"message": "\n".join(lines), "product_ids": ids})
+        except Exception as e:
+            logger.error(f"filter_products error: {e}")
+            return json.dumps({"message": "Ошибка при фильтрации товаров.", "product_ids": []})
+
+    def _get_product_details(self, product_id: str) -> str:
+        try:
+            product = Product.query.get(product_id.strip())
+            if not product:
+                return f"Товар с ID '{product_id}' не найден."
+
+            lines = [
+                f"Товар: {product.name}",
+                f"Ферма/Бренд: {product.brand}",
+                f"Цена: {product.price}₸",
+                f"Рейтинг: {product.rating}/5 ({product.review_count} отзывов)",
+                f"Наличие: {product.stock} шт.",
+                f"Категория: {product.category} / {product.subcategory}",
+                f"Описание: {product.description}",
+            ]
+            features = product.get_features()
+            if features:
+                lines.append(f"Характеристики: {', '.join(features)}")
+            if product.organic_certified:
+                lines.append("Органическая сертификация: да")
+            if product.harvest_date:
+                lines.append(f"Дата сбора урожая: {product.harvest_date.isoformat()}")
+            if product.unit_type:
+                lines.append(f"Единица измерения: {product.unit_type}")
+
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"get_product_details error: {e}")
+            return "Ошибка при получении информации о товаре."
+
+    def _get_recommendations(self, query: str) -> str:
+        try:
+            # Try to treat query as product ID first, fall back to text search
+            product = Product.query.get(query.strip())
+            search_text = product.get_search_text() if product else query
+
+            similar = self.vector_service.search_similar_products(search_text, top_k=5)
+            ids = [p["id"] for p in similar if p["id"] != query][:4]
+
+            if not ids:
+                return json.dumps({"message": "Рекомендации не найдены.", "product_ids": []})
+
+            recommendations = Product.query.filter(Product.id.in_(ids)).all()
+            if not recommendations:
+                return json.dumps({"message": "Рекомендации не найдены.", "product_ids": []})
+
+            lines = ["Рекомендуем:"]
+            for p in recommendations:
+                lines.append(f"• ID: {p.id} | {p.name} ({p.brand}) — {p.price}₸")
+
+            return json.dumps({"message": "\n".join(lines), "product_ids": ids})
+        except Exception as e:
+            logger.error(f"get_recommendations error: {e}")
+            return json.dumps({"message": "Ошибка при получении рекомендаций.", "product_ids": []})
+
+    def _add_to_cart(self, product_id: str, quantity: int = 1) -> str:
+        try:
+            user_id = getattr(_request_ctx, "user_id", "guest_user")
+
+            # Resolve product name → ID if the value doesn't look like a UUID
+            if len(product_id) < 32 or " " in product_id:
+                product = Product.query.filter(
+                    Product.name.ilike(f"%{product_id}%")
+                ).first()
+                if not product:
+                    return json.dumps({
+                        "message": f"Товар '{product_id}' не найден. Сначала найди товар через search_products.",
+                        "success": False,
+                    })
+                product_id = product.id
+
+            product = Product.query.get(product_id)
+            if not product:
+                return json.dumps({"message": "Товар не найден.", "success": False})
+
+            result = self.cart_service.add_to_cart(user_id, product_id, quantity)
+            if not result.get("success", True):
+                return json.dumps(result)
+
+            return json.dumps({
+                "message": f"Добавлено в корзину: {quantity} × {product.name} ({product.price}₸)",
+                "success": True,
+                "product_id": product_id,
+            })
+        except Exception as e:
+            logger.error(f"add_to_cart error: {e}")
+            return json.dumps({"message": "Ошибка при добавлении в корзину.", "success": False})
+
+    # ── Memory ───────────────────────────────────────────────────────────────
+
     def get_or_create_memory(self, session_id: str) -> ConversationBufferWindowMemory:
-        """Get or create memory for a chat session"""
         if session_id not in self.memory_sessions:
             self.memory_sessions[session_id] = ConversationBufferWindowMemory(
                 k=10,
@@ -61,424 +335,170 @@ class ChatService:
             )
         return self.memory_sessions[session_id]
 
-    def create_tools(self) -> List[Tool]:
-        """Create tools for the LangChain agent"""
-        tools = [
-            Tool(
-                name="search_products",
-                description="Find products using semantic search. Input: search query (str).",
-                func=self._search_products_tool,
-            ),
-            Tool(
-                name="filter_products",
-                description="Filter products. Input: JSON string with keys: category, subcategory, brand, min_price, max_price, min_rating, in_stock_only, features (list), search_query, limit.",
-                func=self._filter_products_tool,
-            ),
-            Tool(
-                name="get_product_details",
-                description="Get product details. Input: product ID (str).",
-                func=self._get_product_details_tool,
-            ),
-            Tool(
-                name="get_recommendations",
-                description="Get recommendations. Input: product ID (str) or preference description (str).",
-                func=self._get_recommendations_tool,
-            ),
-            Tool(
-                name="add_to_cart",
-                description="Add a product to the user's cart. Input: JSON string with keys: product_id (str), quantity (int, optional, default 1).",
-                func=self._add_to_cart_tool,
-            ),
-        ]
-        return tools
-
-    def _search_products_tool(self, query: str) -> str:
-        """Tool function for semantic product search"""
-        try:
-            similar_products = self.vector_service.search_similar_products(
-                query, top_k=6
-            )
-
-            if not similar_products:
-                return json.dumps(
-                    {
-                        "message": "No products found for the given query.",
-                        "product_ids": [],
-                    }
-                )
-
-            product_ids = [p["id"] for p in similar_products]
-            products = Product.query.filter(Product.id.in_(product_ids)).all()
-
-            result = "Found the following products:\n"
-            for product in products:
-                result += f"- {product.name} by {product.brand} - ${product.price}\n"
-                result += f"  {product.description[:100]}...\n"
-
-            return json.dumps({"message": result, "product_ids": product_ids})
-
-        except Exception as e:
-            logger.error(f"Error in search_products_tool: {str(e)}")
-            return json.dumps(
-                {
-                    "message": "Error occurred while searching for products.",
-                    "product_ids": [],
-                }
-            )
-
-    def _filter_products_tool(self, filter_json: str) -> str:
-        """Tool function for filtering products"""
-        try:
-            filters = json.loads(filter_json)
-            products = Product.search_by_filters(**filters)
-
-            if not products:
-                return json.dumps(
-                    {
-                        "message": "No products found matching the specified filters.",
-                        "product_ids": [],
-                    }
-                )
-
-            result = f"Found {len(products)} products matching your criteria:\n"
-            for product in products[:5]:
-                result += f"- {product.name} by {product.brand} - ${product.price}\n"
-
-            product_ids = [product.id for product in products[:5]]
-            return json.dumps({"message": result, "product_ids": product_ids})
-
-        except Exception as e:
-            logger.error(f"Error in filter_products_tool: {str(e)}")
-            return json.dumps(
-                {
-                    "message": "Error occurred while filtering products.",
-                    "product_ids": [],
-                }
-            )
-
-    def _get_product_details_tool(self, product_id: str) -> str:
-        """Tool function for getting product details"""
-        try:
-            product = Product.query.get(product_id.strip())
-            if not product:
-                return "Product not found."
-
-            result = "Product Details:\n"
-            result += f"Name: {product.name}\n"
-            result += f"Brand: {product.brand}\n"
-            result += f"Price: ${product.price}\n"
-            result += f"Rating: {product.rating}/5 ({product.review_count} reviews)\n"
-            result += f"Description: {product.description}\n"
-            result += f"Features: {', '.join(product.get_features())}\n"
-            result += f"Stock: {product.stock} available\n"
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error in get_product_details_tool: {str(e)}")
-            return "Error occurred while getting product details."
-
-    def _get_recommendations_tool(self, input_text: str) -> str:
-        """Tool function for getting product recommendations"""
-        try:
-            product = Product.query.get(input_text.strip())
-
-            if product:
-                similar_products = self.vector_service.search_similar_products(
-                    product.get_search_text(), top_k=4
-                )
-                similar_ids = [
-                    p["id"] for p in similar_products if p["id"] != product.id
-                ]
-                recommendations = Product.query.filter(
-                    Product.id.in_(similar_ids)
-                ).all()
-            else:
-                similar_products = self.vector_service.search_similar_products(
-                    input_text, top_k=4
-                )
-                similar_ids = [p["id"] for p in similar_products]
-                recommendations = Product.query.filter(
-                    Product.id.in_(similar_ids)
-                ).all()
-
-            if not recommendations:
-                return "No recommendations found."
-
-            result = "Here are some recommendations:\n"
-            for rec in recommendations:
-                result += f"- {rec.name} by {rec.brand} - ${rec.price}\n"
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error in get_recommendations_tool: {str(e)}")
-            return "Error occurred while getting recommendations."
-
-    def _add_to_cart_tool(self, input_json: str) -> str:
-        """Tool function to add a product to the user's cart"""
-        try:
-            # Log the input for debugging
-            logger.info(f"add_to_cart_tool input: {input_json}")
-            
-            data = json.loads(input_json)
-            product_id = data.get("product_id")
-            quantity = data.get("quantity", 1)
-            user_id = data.get("user_id", "guest_user")
-
-            logger.info(f"Parsed data: product_id={product_id}, quantity={quantity}, user_id={user_id}")
-
-            if not product_id:
-                return json.dumps(
-                    {"message": "Missing product_id for add to cart.", "success": False}
-                )
-
-            # If product_id looks like a product name, try to find the actual product
-            if len(product_id) < 32 or " " in product_id:
-                logger.info(f"Searching for product by name: {product_id}")
-                # Search for product by name (case-insensitive)
-                product = Product.query.filter(
-                    Product.name.ilike(f"%{product_id}%")
-                ).first()
-                
-                if product:
-                    logger.info(f"Found product: {product.name} with ID: {product.id}")
-                    product_id = product.id
-                else:
-                    logger.warning(f"Product not found: {product_id}")
-                    return json.dumps(
-                        {
-                            "message": f"Product '{product_id}' not found.",
-                            "success": False,
-                        }
-                    )
-
-            # Add to cart using the cart service
-            logger.info(f"Adding to cart: user_id={user_id}, product_id={product_id}, quantity={quantity}")
-            result = self.cart_service.add_to_cart(user_id, product_id, quantity)
-            logger.info(f"Cart service result: {result}")
-            
-            # Check if the cart service returned an error
-            if not result.get("success", True):
-                return json.dumps(result)
-            
-            # Get product details for response
-            product = Product.query.get(product_id)
-            if not product:
-                return json.dumps(
-                    {
-                        "message": f"Product with ID {product_id} not found.",
-                        "success": False,
-                    }
-                )
-
-            success_response = {
-                "message": f"Added {quantity} x {product.name} to your cart.",
-                "success": True,
-                "product": {
-                    "id": product.id,
-                    "name": product.name,
-                    "price": product.price,
-                },
-                "quantity": quantity,
-            }
-            
-            logger.info(f"Returning success response: {success_response}")
-            return json.dumps(success_response)
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in add_to_cart_tool: {str(e)}")
-            logger.error(f"Input that caused error: {repr(input_json)}")
-            return json.dumps(
-                {"message": "Invalid JSON format in request.", "success": False}
-            )
-        except Exception as e:
-            logger.error(f"Error in add_to_cart_tool: {str(e)}")
-            return json.dumps(
-                {"message": "Error occurred while adding to cart.", "success": False}
-            )
-
-    def _extract_product_names_from_text(self, text: str) -> list:
-        """Extract product names from the message text by matching against all product names in the database."""
-        product_names = []
-        all_products = Product.query.all()
-        for product in all_products:
-            if product.name in text:
-                product_names.append(product.name)
-        return product_names
+    # ── Main entry point ─────────────────────────────────────────────────────
 
     def process_message(
         self, session_id: str, user_message: str, user_id: str = None
     ) -> Dict[str, Any]:
-        """Process user message and generate AI response"""
         if not self.initialized:
             self.initialize()
 
+        # Make user_id available to tools in this thread
+        _request_ctx.user_id = user_id or "guest_user"
+
         try:
-            chat_session = ChatSession.query.get(session_id)
-            if not chat_session:
-                chat_session = ChatSession(id=session_id, user_id=user_id)
-                from app import db
-
-                db.session.add(chat_session)
-                db.session.commit()
-
-            user_msg = Message(
-                id=str(uuid.uuid4()),
-                chat_session_id=session_id,
-                content=user_message,
-                is_bot=False,
-            )
-            from app import db
-
-            db.session.add(user_msg)
+            self._ensure_session(session_id, user_id)
+            self._save_user_message(session_id, user_message)
 
             memory = self.get_or_create_memory(session_id)
-            chat_history = []
-            if hasattr(memory, "buffer"):
-                for msg in memory.buffer:
-                    if hasattr(msg, "content"):
-                        chat_history.append(msg.content)
-                    elif isinstance(msg, str):
-                        chat_history.append(msg)
-
-            tools = self.create_tools()
-            agent = initialize_agent(
-                tools=tools,
-                llm=self.llm,
-                agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
+            executor = AgentExecutor(
+                agent=self._agent,
+                tools=self._tools,
                 memory=memory,
                 verbose=True,
-                handle_parsing_errors=True,
+                handle_parsing_errors=(
+                    "Parsing error — re-read the tool schema and retry with correct arguments."
+                ),
+                max_iterations=8,
+                max_execution_time=50,
+                return_intermediate_steps=True,
             )
 
-            system_prompt = """You are Storey, an AI shopping assistant for an electronics e-commerce store.
-            You help customers find the perfect tech products based on their needs and preferences.   
+            result = executor.invoke({"input": user_message})
+            ai_text = result.get("output", "").strip()
 
-            Guidelines:            
-            - Be helpful, friendly, and knowledgeable about technology products
-            - Use the available tools to search for products, get details, and make recommendations
-            - Always provide specific product suggestions when possible
-            - Include prices, ratings, and key features in your responses
-            - Ask clarifying questions if the user's request is unclear
-            - Focus on electronics categories: smartphones, laptops, headphones, gaming equipment, smart home devices
-            - When a user wants to add a product to cart, use the add_to_cart tool with the product name or ID
-            - If the user says "add this to cart" or similar, use the product name from your most recent message
+            if not ai_text:
+                logger.warning("Agent returned empty output, using direct LLM fallback")
+                ai_text = self._direct_llm_fallback(user_message, memory)
 
-            Available tools:
-            - search_products: Find products using semantic search. Input: search query (str).
-            - filter_products: Filter products. Input: JSON string with keys: category, subcategory, brand, min_price, max_price, min_rating, in_stock_only, features (list), search_query, limit.
-            - get_product_details: Get product details. Input: product ID (str).
-            - get_recommendations: Get recommendations. Input: product ID (str) or preference description (str).
-            - add_to_cart: Add a product to the user's cart. Input: JSON string with keys: product_id (str or product name), quantity (int, optional, default 1).
-            """
-
-            agent_input = {"input": f"{system_prompt}\n\nUser: {user_message}"}
-            result = agent(agent_input)
-            ai_response = (
-                result["output"]
-                if isinstance(result, dict) and "output" in result
-                else result
-            )
-
-            product_ids = []
-            if isinstance(result, dict) and "intermediate_steps" in result:
-                for step in result["intermediate_steps"]:
-                    tool_name = (
-                        getattr(step[0], "tool", None)
-                        if hasattr(step[0], "tool")
-                        else None
-                    )
-                    tool_output = step[1]
-                    if tool_name in ["search_products", "filter_products"]:
-                        try:
-                            parsed = json.loads(tool_output)
-                            ids = parsed.get("product_ids", [])
-                            if ids:
-                                product_ids.extend(ids)
-                        except Exception:
-                            pass
-            product_ids = list(dict.fromkeys(product_ids))
-
-            message_text = ai_response
-            if not product_ids:
-                try:
-                    parsed = json.loads(ai_response)
-                    message_text = parsed.get("message", ai_response)
-                    product_ids = parsed.get("product_ids", [])
-                except Exception:
-                    pass
-
-            if not product_ids:
-                product_names = self._extract_product_names_from_text(message_text)
-                if product_names:
-                    product_ids = [
-                        p.id
-                        for p in Product.query.filter(
-                            Product.name.in_(product_names)
-                        ).all()
-                    ]
-
-            ai_msg = Message(
-                id=str(uuid.uuid4()),
-                chat_session_id=session_id,
-                content=message_text,
-                is_bot=True,
-                message_type="product" if product_ids else "text",
-                products=product_ids,
-            )
-            db.session.add(ai_msg)
-            db.session.commit()
-
-            products = []
-            if product_ids:
-                products = [
-                    Product.query.get(pid).to_dict()
-                    for pid in product_ids
-                    if Product.query.get(pid)
-                ]
-
-            return {
-                "id": ai_msg.id,
-                "content": message_text,
-                "isBot": True,
-                "timestamp": ai_msg.created_at.isoformat(),
-                "products": products,
-                "type": ai_msg.message_type,
-            }
+            product_ids = self._extract_product_ids(result.get("intermediate_steps", []))
+            return self._save_and_return(session_id, ai_text, product_ids)
 
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
-            error_msg = Message(
+            logger.error(f"process_message error: {e}", exc_info=True)
+            return self._error_response(session_id)
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _ensure_session(self, session_id: str, user_id: Optional[str]):
+        if not ChatSession.query.get(session_id):
+            from app import db
+            db.session.add(ChatSession(id=session_id, user_id=user_id))
+            db.session.commit()
+
+    def _save_user_message(self, session_id: str, content: str):
+        from app import db
+        db.session.add(Message(
+            id=str(uuid.uuid4()),
+            chat_session_id=session_id,
+            content=content,
+            is_bot=False,
+        ))
+        db.session.commit()
+
+    def _save_and_return(
+        self, session_id: str, ai_text: str, product_ids: List[str]
+    ) -> Dict[str, Any]:
+        from app import db
+        ai_msg = Message(
+            id=str(uuid.uuid4()),
+            chat_session_id=session_id,
+            content=ai_text,
+            is_bot=True,
+            message_type="product" if product_ids else "text",
+            products=product_ids,
+        )
+        db.session.add(ai_msg)
+        db.session.commit()
+
+        products = []
+        for pid in product_ids:
+            p = Product.query.get(pid)
+            if p:
+                products.append(p.to_dict())
+
+        return {
+            "id": ai_msg.id,
+            "content": ai_text,
+            "isBot": True,
+            "timestamp": ai_msg.created_at.isoformat(),
+            "products": products,
+            "type": ai_msg.message_type,
+        }
+
+    def _direct_llm_fallback(
+        self, user_message: str, memory: ConversationBufferWindowMemory
+    ) -> str:
+        """Called when the agent executor produces empty output — ask the LLM directly."""
+        try:
+            recent = memory.chat_memory.messages[-6:] if memory.chat_memory.messages else []
+            history = [
+                ("human" if m.type == "human" else "ai", m.content)
+                for m in recent
+            ]
+            messages = (
+                [("system",
+                  "Ты — Farmy, помощник фермерского магазина. "
+                  "Ответь на вопрос пользователя на русском языке. "
+                  "Если нужно найти товары, предложи уточнить запрос.")]
+                + history
+                + [("human", user_message)]
+            )
+            response = self.llm.invoke(messages)
+            text = response.content.strip()
+            return text or "Извините, не могу ответить сейчас. Попробуйте переформулировать вопрос."
+        except Exception as e:
+            logger.error(f"Direct LLM fallback error: {e}")
+            return "Извините, произошла ошибка. Пожалуйста, попробуйте ещё раз."
+
+    def _extract_product_ids(self, intermediate_steps: list) -> List[str]:
+        """Deduplicated product IDs collected from tool outputs, preserving order."""
+        seen: Dict[str, None] = {}
+        for step in intermediate_steps:
+            tool_name = getattr(step[0], "tool", None)
+            if tool_name in {"search_products", "filter_products", "get_recommendations"}:
+                try:
+                    parsed = json.loads(step[1])
+                    for pid in parsed.get("product_ids", []):
+                        seen[pid] = None
+                except Exception:
+                    pass
+        return list(seen.keys())
+
+    def _error_response(self, session_id: str) -> Dict[str, Any]:
+        try:
+            from app import db
+            msg = Message(
                 id=str(uuid.uuid4()),
                 chat_session_id=session_id,
-                content="I'm sorry, I encountered an error. Please try again.",
+                content="Извините, произошла ошибка. Пожалуйста, попробуйте ещё раз.",
                 is_bot=True,
             )
-            from app import db
-
-            db.session.add(error_msg)
+            db.session.add(msg)
             db.session.commit()
             return {
-                "id": error_msg.id,
-                "content": error_msg.content,
+                "id": msg.id,
+                "content": msg.content,
                 "isBot": True,
-                "timestamp": error_msg.created_at.isoformat(),
+                "timestamp": msg.created_at.isoformat(),
+                "products": [],
+                "type": "text",
+            }
+        except Exception:
+            return {
+                "id": str(uuid.uuid4()),
+                "content": "Произошла ошибка. Попробуйте ещё раз.",
+                "isBot": True,
+                "timestamp": "",
                 "products": [],
                 "type": "text",
             }
 
-    def _extract_product_ids_from_response(self, response: str) -> List[str]:
-        """Extract product IDs from AI response (basic implementation)"""
-
-        product_ids = []
-
-        return product_ids
+    # ── History ──────────────────────────────────────────────────────────────
 
     def get_chat_history(
         self, session_id: str, limit: int = 50
     ) -> List[Dict[str, Any]]:
-        """Get chat history for a session"""
         try:
             messages = (
                 Message.query.filter_by(chat_session_id=session_id)
@@ -486,14 +506,10 @@ class ChatService:
                 .limit(limit)
                 .all()
             )
-
             return [msg.to_dict(include_product_details=True) for msg in messages]
-
         except Exception as e:
-            logger.error(f"Error getting chat history: {str(e)}")
+            logger.error(f"get_chat_history error: {e}")
             return []
 
     def clear_session_memory(self, session_id: str):
-        """Clear memory for a specific session"""
-        if session_id in self.memory_sessions:
-            del self.memory_sessions[session_id]
+        self.memory_sessions.pop(session_id, None)

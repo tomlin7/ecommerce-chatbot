@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
+import { useLanguage } from "@/context/LanguageContext";
 import api from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { ProductFilters as Filters } from "@/types";
@@ -28,10 +29,8 @@ interface Category {
   subcategories: string[];
 }
 
-export function ProductFilters({
-  filters,
-  onFiltersChange,
-}: ProductFiltersProps) {
+export function ProductFilters({ filters, onFiltersChange }: ProductFiltersProps) {
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 3000]);
@@ -86,9 +85,9 @@ export function ProductFilters({
     <Card className="sticky top-20">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Filters</CardTitle>
+          <CardTitle>{t('filters.title')}</CardTitle>
           <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Clear All
+            {t('filters.reset')}
           </Button>
         </div>
       </CardHeader>
@@ -96,9 +95,9 @@ export function ProductFilters({
       <CardContent className="space-y-6">
         {/* Search */}
         <div className="space-y-2">
-          <Label>Search</Label>
+          <Label>{t('filters.search')}</Label>
           <Input
-            placeholder="Search products..."
+            placeholder={t('filters.searchPlaceholder')}
             value={filters.search || ""}
             onChange={(e) => handleFilterChange("search", e.target.value)}
           />
@@ -108,7 +107,7 @@ export function ProductFilters({
 
         {/* Category */}
         <div className="space-y-2">
-          <Label>Category</Label>
+          <Label>{t('filters.category')}</Label>
           <Select
             value={filters.category || ""}
             onValueChange={(value) => {
@@ -117,10 +116,10 @@ export function ProductFilters({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="All Categories" />
+              <SelectValue placeholder={t('filters.allCategories')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All Categories">All Categories</SelectItem>
+              <SelectItem value="All Categories">{t('filters.allCategories')}</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category.category} value={category.category}>
                   {category.category}
@@ -133,19 +132,17 @@ export function ProductFilters({
         {/* Subcategory */}
         {selectedCategory && (
           <div className="space-y-2">
-            <Label>Subcategory</Label>
+            <Label>{t('filters.subcategory')}</Label>
             <Select
               value={filters.subcategory || ""}
-              onValueChange={(value) =>
-                handleFilterChange("subcategory", value)
-              }
+              onValueChange={(value) => handleFilterChange("subcategory", value)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="All Subcategories" />
+                <SelectValue placeholder={t('filters.allSubcategories')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All Subcategories">
-                  All Subcategories
+                  {t('filters.allSubcategories')}
                 </SelectItem>
                 {selectedCategory.subcategories.map((subcategory) => (
                   <SelectItem key={subcategory} value={subcategory}>
@@ -159,16 +156,16 @@ export function ProductFilters({
 
         {/* Brand */}
         <div className="space-y-2">
-          <Label>Brand</Label>
+          <Label>{t('filters.brand')}</Label>
           <Select
             value={filters.brand || ""}
             onValueChange={(value) => handleFilterChange("brand", value)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="All Brands" />
+              <SelectValue placeholder={t('filters.allBrands')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All Brands">All Brands</SelectItem>
+              <SelectItem value="All Brands">{t('filters.allBrands')}</SelectItem>
               {brands.map((brand) => (
                 <SelectItem key={brand} value={brand}>
                   {brand}
@@ -182,7 +179,7 @@ export function ProductFilters({
 
         {/* Price Range */}
         <div className="space-y-4">
-          <Label>Price Range</Label>
+          <Label>{t('filters.priceRange')}</Label>
           <Slider
             value={priceRange}
             onValueChange={handlePriceChange}
@@ -199,7 +196,7 @@ export function ProductFilters({
 
         {/* Rating */}
         <div className="space-y-2">
-          <Label>Minimum Rating</Label>
+          <Label>{t('filters.minRating')}</Label>
           <Select
             value={filters.min_rating?.toString() || ""}
             onValueChange={(value) =>
@@ -210,14 +207,14 @@ export function ProductFilters({
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="Any Rating" />
+              <SelectValue placeholder={t('filters.anyRating')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Any Rating">Any Rating</SelectItem>
-              <SelectItem value="4">4+ Stars</SelectItem>
-              <SelectItem value="3">3+ Stars</SelectItem>
-              <SelectItem value="2">2+ Stars</SelectItem>
-              <SelectItem value="1">1+ Stars</SelectItem>
+              <SelectItem value="Any Rating">{t('filters.anyRating')}</SelectItem>
+              <SelectItem value="4">{t('filters.starsPlus', { n: 4 })}</SelectItem>
+              <SelectItem value="3">{t('filters.starsPlus', { n: 3 })}</SelectItem>
+              <SelectItem value="2">{t('filters.starsPlus', { n: 2 })}</SelectItem>
+              <SelectItem value="1">{t('filters.oneStar')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -228,13 +225,11 @@ export function ProductFilters({
             type="checkbox"
             id="in-stock"
             checked={filters.in_stock_only || false}
-            onChange={(e) =>
-              handleFilterChange("in_stock_only", e.target.checked)
-            }
+            onChange={(e) => handleFilterChange("in_stock_only", e.target.checked)}
             className="rounded border-gray-300"
           />
           <Label htmlFor="in-stock" className="text-sm">
-            In stock only
+            {t('filters.inStockOnly')}
           </Label>
         </div>
       </CardContent>

@@ -34,6 +34,37 @@ export interface Product {
   updatedAt: string;
   isActive: boolean;
   inStock: boolean;
+  // Farm-specific fields
+  harvestDate?: string;
+  farmLocation?: string;
+  isSeasonal?: boolean;
+  organicCertified?: boolean;
+  unitType?: string;
+  season?: string;
+}
+
+export interface Farm {
+  id: string;
+  name: string;
+  description?: string;
+  location: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  phone?: string;
+  email?: string;
+  website?: string;
+  imageUrl?: string;
+  gallery: string[];
+  story?: string;
+  practices: string[];
+  certifications: string[];
+  establishedYear?: number;
+  acreage?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  products?: Product[];
 }
 
 export interface ChatMessage {

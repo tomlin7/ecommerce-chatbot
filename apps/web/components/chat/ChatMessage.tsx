@@ -115,7 +115,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                           fallback={
                             <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 min-h-[18rem]">
                               <p className="text-sm">
-                                Product could not be loaded
+                                Товар не удалось загрузить
                               </p>
                             </div>
                           }

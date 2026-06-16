@@ -38,6 +38,12 @@ def upgrade():
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('embedding_id', sa.String(length=100), nullable=True),
+    sa.Column('harvest_date', sa.Date(), nullable=True),
+    sa.Column('farm_location', sa.String(length=200), nullable=True),
+    sa.Column('is_seasonal', sa.Boolean(), nullable=True),
+    sa.Column('organic_certified', sa.Boolean(), nullable=True),
+    sa.Column('unit_type', sa.String(length=50), nullable=True),
+    sa.Column('season', sa.String(length=50), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('products', schema=None) as batch_op:

@@ -9,7 +9,7 @@ backlog = 2048
 workers = 1  # Keep low due to memory constraints
 worker_class = "sync"
 worker_connections = 1000
-timeout = 30
+timeout = 300
 keepalive = 2
 
 # Memory management

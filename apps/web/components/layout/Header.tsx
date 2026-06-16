@@ -10,7 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   LogOut,
   MessageCircle,
@@ -22,6 +24,7 @@ import Link from "next/link";
 
 export function Header() {
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -41,18 +44,20 @@ export function Header() {
               href="/products"
               className="text-sm font-medium hover:text-primary transition-colors"
             >
-              Products
+              {t('nav.products')}
             </Link>
             <Link
               href="/chat"
               className="text-sm font-medium hover:text-primary transition-colors"
             >
-              AI Assistant
+              {t('nav.aiAssistant')}
             </Link>
           </nav>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
+          <LanguageSwitcher />
+
           {user ? (
             <>
               <Button variant="ghost" size="icon" asChild>
@@ -95,19 +100,19 @@ export function Header() {
                   <DropdownMenuItem asChild>
                     <Link href="/profile">
                       <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
+                      <span>{t('nav.profile')}</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/profile/preferences">
                       <Settings className="mr-2 h-4 w-4" />
-                      <span>Preferences</span>
+                      <span>{t('nav.preferences')}</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
+                    <span>{t('nav.logout')}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -115,10 +120,10 @@ export function Header() {
           ) : (
             <div className="flex items-center space-x-2">
               <Button variant="ghost" asChild>
-                <Link href="/login">Login</Link>
+                <Link href="/login">{t('nav.login')}</Link>
               </Button>
               <Button asChild>
-                <Link href="/register">Sign Up</Link>
+                <Link href="/register">{t('nav.register')}</Link>
               </Button>
             </div>
           )}

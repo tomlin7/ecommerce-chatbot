@@ -53,9 +53,9 @@ function ProductsContent() {
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Products</h1>
+        <h1 className="text-3xl font-bold mb-2">Товары</h1>
         <p className="text-muted-foreground">
-          Discover our complete collection of technology products
+          Откройте для себя наш полный ассортимент фермерских продуктов
         </p>
       </div>
 
@@ -67,7 +67,7 @@ function ProductsContent() {
         <div className="lg:col-span-3">
           <div className="mb-6">
             <p className="text-sm text-muted-foreground">
-              {loading ? "Loading..." : `${products.length} products found`}
+              {loading ? "Загрузка..." : `Найдено товаров: ${products.length}`}
             </p>
           </div>
           <ProductGrid products={products} loading={loading} />
@@ -83,13 +83,13 @@ export default function ProductsPage() {
       fallback={
         <div className="container py-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Products</h1>
+            <h1 className="text-3xl font-bold mb-2">Товары</h1>
             <p className="text-muted-foreground">
-              Discover our complete collection of technology products
+              Откройте для себя наш полный ассортимент фермерских продуктов
             </p>
           </div>
           <div className="flex justify-center items-center h-64">
-            <div className="text-muted-foreground">Loading products...</div>
+            <div className="text-muted-foreground">Загрузка товаров...</div>
           </div>
         </div>
       }

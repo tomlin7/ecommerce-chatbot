@@ -37,29 +37,29 @@ def create_app(config_name=None):
 
     @app.errorhandler(404)
     def not_found(error):
-        return jsonify({"success": False, "message": "Resource not found"}), 404
+        return jsonify({"success": False, "message": "Ресурс не найден"}), 404
 
     @app.errorhandler(500)
     def internal_error(error):
         app.logger.error(f"Internal server error: {str(error)}")
-        return jsonify({"success": False, "message": "Internal server error"}), 500
+        return jsonify({"success": False, "message": "Внутренняя ошибка сервера"}), 500
 
     @app.errorhandler(400)
     def bad_request(error):
-        return jsonify({"success": False, "message": "Bad request"}), 400
+        return jsonify({"success": False, "message": "Неверный запрос"}), 400
 
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
-        return jsonify({"success": False, "message": "Token has expired"}), 401
+        return jsonify({"success": False, "message": "Срок действия токена истек"}), 401
 
     @jwt.invalid_token_loader
     def invalid_token_callback(error):
-        return jsonify({"success": False, "message": "Invalid token"}), 401
+        return jsonify({"success": False, "message": "Недействительный токен"}), 401
 
     @jwt.unauthorized_loader
     def missing_token_callback(error):
         return jsonify(
-            {"success": False, "message": "Authorization token is required"}
+            {"success": False, "message": "Требуется токен авторизации"}
         ), 401
 
     @app.route("/api/health", methods=["GET"])
@@ -68,7 +68,7 @@ def create_app(config_name=None):
             {
                 "success": True,
                 "status": "healthy",
-                "message": "E-commerce Chatbot API is running",
+                "message": "API чат-бота электронной коммерции работает",
             }
         ), 200
 

@@ -25,7 +25,7 @@ class AuthService:
             if existing_user:
                 return {
                     "success": False,
-                    "message": "User with this email already exists",
+                    "message": "Пользователь с таким email уже существует",
                 }
 
             user_id = str(uuid.uuid4())
@@ -43,7 +43,7 @@ class AuthService:
 
             return {
                 "success": True,
-                "message": "User registered successfully",
+                "message": "Пользователь успешно зарегистрирован",
                 "user": user.to_dict(),
                 "access_token": access_token,
                 "refresh_token": refresh_token,
@@ -54,7 +54,7 @@ class AuthService:
             from app import db
 
             db.session.rollback()
-            return {"success": False, "message": "Registration failed"}
+            return {"success": False, "message": "Ошибка при регистрации"}
 
     @staticmethod
     def login_user(email: str, password: str) -> Dict[str, Any]:
@@ -63,10 +63,10 @@ class AuthService:
             user = User.query.filter_by(email=email).first()
 
             if not user or not user.check_password(password):
-                return {"success": False, "message": "Invalid email or password"}
+                return {"success": False, "message": "Неверный email или пароль"}
 
             if not user.is_active:
-                return {"success": False, "message": "Account is deactivated"}
+                return {"success": False, "message": "Аккаунт деактивирован"}
 
             access_token = create_access_token(identity=user.id)
             refresh_token = create_refresh_token(identity=user.id)
@@ -80,7 +80,7 @@ class AuthService:
 
             return {
                 "success": True,
-                "message": "Login successful",
+                "message": "Вход выполнен успешно",
                 "user": user.to_dict(),
                 "access_token": access_token,
                 "refresh_token": refresh_token,
@@ -88,7 +88,7 @@ class AuthService:
 
         except Exception as e:
             logger.error(f"Error logging in user: {str(e)}")
-            return {"success": False, "message": "Login failed"}
+            return {"success": False, "message": "Ошибка при входе"}
 
     @staticmethod
     def get_user_by_id(user_id: str) -> Optional[User]:
@@ -107,7 +107,7 @@ class AuthService:
         try:
             user = User.query.get(user_id)
             if not user:
-                return {"success": False, "message": "User not found"}
+                return {"success": False, "message": "Пользователь не найден"}
 
             user.set_preferences(preferences)
             from app import db
@@ -118,7 +118,7 @@ class AuthService:
 
             return {
                 "success": True,
-                "message": "Preferences updated successfully",
+                "message": "Настройки успешно обновлены",
                 "user": user.to_dict(),
             }
 
@@ -127,7 +127,7 @@ class AuthService:
             from app import db
 
             db.session.rollback()
-            return {"success": False, "message": "Failed to update preferences"}
+            return {"success": False, "message": "Не удалось обновить настройки"}
 
     @staticmethod
     def refresh_token(current_user_id: str) -> Dict[str, Any]:
@@ -135,7 +135,7 @@ class AuthService:
         try:
             user = User.query.get(current_user_id)
             if not user or not user.is_active:
-                return {"success": False, "message": "Invalid user"}
+                return {"success": False, "message": "Некорректный пользователь"}
 
             access_token = create_access_token(identity=current_user_id)
 
@@ -143,7 +143,7 @@ class AuthService:
 
         except Exception as e:
             logger.error(f"Error refreshing token: {str(e)}")
-            return {"success": False, "message": "Token refresh failed"}
+            return {"success": False, "message": "Ошибка обновления токена"}
 
     @staticmethod
     def deactivate_user(user_id: str) -> Dict[str, Any]:
@@ -151,7 +151,7 @@ class AuthService:
         try:
             user = User.query.get(user_id)
             if not user:
-                return {"success": False, "message": "User not found"}
+                return {"success": False, "message": "Пользователь не найден"}
 
             user.is_active = False
             user.updated_at = datetime.utcnow()
@@ -162,11 +162,11 @@ class AuthService:
 
             logger.info(f"User deactivated: {user.email}")
 
-            return {"success": True, "message": "User account deactivated"}
+            return {"success": True, "message": "Аккаунт пользователя деактивирован"}
 
         except Exception as e:
             logger.error(f"Error deactivating user: {str(e)}")
             from app import db
 
             db.session.rollback()
-            return {"success": False, "message": "Failed to deactivate user"}
+            return {"success": False, "message": "Не удалось деактивировать пользователя"}

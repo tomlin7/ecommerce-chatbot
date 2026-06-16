@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 from models import db
 
@@ -29,6 +29,14 @@ class Product(db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
 
     embedding_id = db.Column(db.String(100))
+
+    # Farm-specific fields
+    harvest_date = db.Column(db.Date)
+    farm_location = db.Column(db.String(200))
+    is_seasonal = db.Column(db.Boolean, default=False, index=True)
+    organic_certified = db.Column(db.Boolean, default=False, index=True)
+    unit_type = db.Column(db.String(50))  # e.g., "per pound", "per dozen", "per bunch"
+    season = db.Column(db.String(50))  # e.g., "Spring", "Summer", "Fall", "Winter"
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -88,6 +96,13 @@ class Product(db.Model):
             "updatedAt": self.updated_at.isoformat(),
             "isActive": self.is_active,
             "inStock": self.is_in_stock(),
+            # Farm-specific fields
+            "harvestDate": self.harvest_date.isoformat() if self.harvest_date else None,
+            "farmLocation": self.farm_location,
+            "isSeasonal": self.is_seasonal,
+            "organicCertified": self.organic_certified,
+            "unitType": self.unit_type,
+            "season": self.season,
         }
 
         if include_embedding:

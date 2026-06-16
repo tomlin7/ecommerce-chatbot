@@ -1,0 +1,61 @@
+@startuml architecture
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.5
+
+skinparam node {
+    BackgroundColor #EEF4FF
+    BorderColor #4A6FA5
+    FontColor #1A1A2E
+}
+
+skinparam component {
+    BackgroundColor #FFFFFF
+    BorderColor #4A6FA5
+    FontColor #1A1A2E
+}
+
+skinparam database {
+    BackgroundColor #FFF8E7
+    BorderColor #D4A017
+    FontColor #1A1A2E
+}
+
+skinparam cloud {
+    BackgroundColor #F0FFF4
+    BorderColor #2E8B57
+    FontColor #1A1A2E
+}
+
+title Фермерский магазин — Архитектура системы
+
+left to right direction
+
+actor "Пользователь" as User
+
+node "Docker: web :3000" {
+    component "Next.js\nФронтенд" as Frontend
+}
+
+node "Docker: server :5000" {
+    component "Flask API\n+ Gunicorn" as API
+    component "ChatService\n(LangChain Agent)" as Chat
+    component "VectorService\n(Embeddings)" as Vector
+}
+
+database "SQLite\n(volume)" as DB
+
+cloud "Google Gemini\n2.5 Flash" as Gemini
+cloud "Pinecone\nВекторная БД" as Pinecone
+
+User --> Frontend : HTTP
+Frontend --> API : REST / JWT
+API --> Chat
+API --> DB : SQLAlchemy
+Chat --> Vector
+Chat --> Gemini : LangChain
+Vector --> Pinecone : gRPC
+
+@enduml

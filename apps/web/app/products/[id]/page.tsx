@@ -97,7 +97,7 @@ export default function ProductDetailPage() {
 
   const handleLike = async () => {
     if (!user) {
-      toast.error("Please login to like products");
+      toast.error("Войдите, чтобы добавить в избранное");
       return;
     }
 
@@ -112,7 +112,7 @@ export default function ProductDetailPage() {
         toast(response.data.message);
       }
     } catch (error) {
-      toast.error("Failed to update like status");
+      toast.error("Не удалось обновить статус избранного");
     }
   };
 
@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
 
     const shareData = {
       title: product.name,
-      text: `Check out this amazing ${product.name} from ${product.brand}!`,
+      text: `Посмотрите этот замечательный ${product.name} от ${product.brand}!`,
       url: window.location.href,
     };
 
@@ -131,21 +131,21 @@ export default function ProductDetailPage() {
       } else {
         // Fallback to clipboard
         await navigator.clipboard.writeText(shareData.url);
-        toast("Product link copied to clipboard!");
+        toast("Ссылка на товар скопирована!");
       }
     } catch (error) {
       try {
         await navigator.clipboard.writeText(shareData.url);
-        toast("Product link copied to clipboard!");
+        toast("Ссылка на товар скопирована!");
       } catch (clipboardError) {
-        toast.error("Failed to share product");
+        toast.error("Не удалось поделиться товаром");
       }
     }
   };
 
   const handleAddToCart = async () => {
     if (!user) {
-      toast.error("Please login to add items to cart");
+      toast.error("Войдите, чтобы добавлять товары в корзину");
       return;
     }
 
@@ -157,9 +157,9 @@ export default function ProductDetailPage() {
         product_id: product.id,
         quantity,
       });
-      toast(`Added ${quantity} ${product.name} to cart!`);
+      toast(`Добавлено ${quantity} шт. ${product.name} в корзину!`);
     } catch (error) {
-      toast.error("Failed to add to cart");
+      toast.error("Не удалось добавить в корзину");
     }
   };
 
@@ -184,9 +184,9 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="container py-8 text-center">
-        <h1 className="text-2xl font-bold mb-4">Product Not Found</h1>
+        <h1 className="text-2xl font-bold mb-4">Товар не найден</h1>
         <p className="text-muted-foreground">
-          The product you're looking for doesn't exist.
+          Товар который вы ищете не существует.
         </p>
       </div>
     );
@@ -208,7 +208,7 @@ export default function ProductDetailPage() {
             />
             {product.isOnSale && (
               <Badge className="absolute top-4 left-4 bg-red-500 hover:bg-red-600">
-                -{product.salePercentage}% OFF
+                -{product.salePercentage}% СКИДКА
               </Badge>
             )}
           </div>
@@ -226,11 +226,11 @@ export default function ProductDetailPage() {
               <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
               <span className="font-medium">{product.rating}</span>
               <span className="text-muted-foreground">
-                ({product.reviewCount} reviews)
+                 ({product.reviewCount} отзывов)
               </span>
             </div>
             <Badge variant={product.inStock ? "default" : "secondary"}>
-              {product.inStock ? "In Stock" : "Out of Stock"}
+              {product.inStock ? "В наличии" : "Нет в наличии"}
             </Badge>
           </div>
 
@@ -248,7 +248,7 @@ export default function ProductDetailPage() {
             </div>
             {product.isOnSale && (
               <p className="text-sm text-green-600">
-                You save{" "}
+                 Вы экономите{" "}
                 {formatPrice((product.originalPrice || 0) - product.price)}
               </p>
             )}
@@ -261,7 +261,7 @@ export default function ProductDetailPage() {
           {/* Features */}
           {product.features.length > 0 && (
             <div>
-              <h3 className="font-semibold mb-2">Key Features</h3>
+              <h3 className="font-semibold mb-2">Основные характеристики</h3>
               <ul className="space-y-1">
                 {product.features.map((feature, index) => (
                   <li
@@ -281,7 +281,7 @@ export default function ProductDetailPage() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <label htmlFor="quantity" className="text-sm font-medium">
-                  Quantity:
+                   Количество:
                 </label>
                 <select
                   id="quantity"
@@ -301,7 +301,7 @@ export default function ProductDetailPage() {
                 </select>
               </div>
               <span className="text-sm text-muted-foreground">
-                {product.stock} available
+                 Доступно: {product.stock} шт.
               </span>
             </div>
 
@@ -313,7 +313,7 @@ export default function ProductDetailPage() {
                 disabled={!product.inStock}
               >
                 <ShoppingCart className="mr-2 h-5 w-5" />
-                {product.inStock ? "Add to Cart" : "Out of Stock"}
+                 {product.inStock ? "Добавить в корзину" : "Нет в наличии"}
               </Button>
               <Button
                 size="lg"
@@ -346,32 +346,32 @@ export default function ProductDetailPage() {
       {/* Product Details Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Product Details</CardTitle>
+           <CardTitle>Характеристики товара</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <span className="font-medium">Category:</span>
+               <span className="font-medium">Категория:</span>
               <span className="ml-2 text-muted-foreground">
                 {product.category}
               </span>
             </div>
             <div>
-              <span className="font-medium">Subcategory:</span>
+               <span className="font-medium">Подкатегория:</span>
               <span className="ml-2 text-muted-foreground">
                 {product.subcategory}
               </span>
             </div>
             <div>
-              <span className="font-medium">Brand:</span>
+               <span className="font-medium">Бренд:</span>
               <span className="ml-2 text-muted-foreground">
                 {product.brand}
               </span>
             </div>
             <div>
-              <span className="font-medium">Stock:</span>
+               <span className="font-medium">В наличии:</span>
               <span className="ml-2 text-muted-foreground">
-                {product.stock} units
+                 {product.stock} шт.
               </span>
             </div>
           </div>
@@ -381,7 +381,7 @@ export default function ProductDetailPage() {
       {/* Recommendations */}
       {recommendations && recommendations.length > 0 && (
         <div>
-          <h2 className="text-2xl font-bold mb-6">You Might Also Like</h2>
+           <h2 className="text-2xl font-bold mb-6">Вам также может понравиться</h2>
           <ProductGrid products={recommendations} />
         </div>
       )}

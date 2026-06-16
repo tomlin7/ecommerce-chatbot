@@ -53,10 +53,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem("refresh_token", data.refresh_token);
         setUser(data.user!);
-        toast("Login successful!");
+        toast("Вход выполнен успешно!");
         return true;
       } else {
-        toast.error(data.message || "Login failed");
+        toast.error(data.message || "Ошибка входа");
         return false;
       }
     } catch (error: any) {
@@ -82,10 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem("refresh_token", data.refresh_token);
         setUser(data.user!);
-        toast("Registration successful!");
+        toast("Регистрация прошла успешно!");
         return true;
       } else {
-        toast.error(data.message || "Registration failed");
+        toast.error(data.message || "Ошибка регистрации");
         return false;
       }
     } catch (error: any) {
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     setUser(null);
-    toast("Logged out successfully");
+    toast("Вы успешно вышли из системы");
   };
 
   const updatePreferences = async (preferences: any): Promise<boolean> => {
@@ -106,10 +106,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await api.put("/auth/preferences", preferences);
       if (response.data.success) {
         setUser(response.data.user);
-        toast("Preferences updated successfully!");
+        toast("Предпочтения успешно обновлены!");
         return true;
       } else {
-        toast.error(response.data.message || "Failed to update preferences");
+        toast.error(response.data.message || "Не удалось обновить предпочтения");
         return false;
       }
     } catch (error: any) {

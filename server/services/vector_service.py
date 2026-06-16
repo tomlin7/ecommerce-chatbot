@@ -33,13 +33,15 @@ class VectorService:
             logger.error(f"Failed to initialize vector service: {str(e)}")
             raise
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str, is_query: bool = False) -> List[float]:
         """Generate embedding for given text"""
         if not self.initialized:
             self.initialize()
 
         try:
-            embedding = self.model.encode(text)
+            # multilingual-e5 requires these prefixes for best results
+            prefix = "query: " if is_query else "passage: "
+            embedding = self.model.encode(prefix + text, normalize_embeddings=True)
             return embedding.tolist()
         except Exception as e:
             logger.error(f"Failed to generate embedding: {str(e)}")
@@ -76,7 +78,7 @@ class VectorService:
             self.initialize()
 
         try:
-            query_embedding = self.generate_embedding(query_text)
+            query_embedding = self.generate_embedding(query_text, is_query=True)
 
             search_kwargs = {
                 "vector": query_embedding,

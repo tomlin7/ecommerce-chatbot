@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { useLanguage } from '@/context/LanguageContext'
 import { Send } from 'lucide-react'
+import { useState } from 'react'
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
@@ -11,6 +12,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
+  const { t } = useLanguage()
   const [message, setMessage] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -34,7 +36,7 @@ export function ChatInput({ onSendMessage, disabled }: ChatInputProps) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask me about products, get recommendations, or add items to your cart..."
+        placeholder={t('chat.inputPlaceholder')}
         className="min-h-[60px] resize-none"
         disabled={disabled}
       />
